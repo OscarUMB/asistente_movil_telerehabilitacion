@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
 
 import 'camera_view.dart';
+import 'kinematics_engine.dart';
 
 /// Runs on-device pose detection over the live camera stream.
 class PoseDetectorView extends StatefulWidget {
@@ -143,18 +144,85 @@ class PosePainter extends CustomPainter {
       ..color = Colors.black87
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5;
+    final leftArmPaint = Paint()
+      ..color = Colors.cyanAccent
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 7
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
 
     for (final pose in poses) {
+      final shoulder = pose.landmarks[PoseLandmarkType.leftShoulder];
+      final elbow = pose.landmarks[PoseLandmarkType.leftElbow];
+      final wrist = pose.landmarks[PoseLandmarkType.leftWrist];
+
+      Offset? elbowPoint;
+      double? elbowAngle;
+      if (shoulder != null && elbow != null && wrist != null) {
+        final shoulderPoint = _translateLandmark(shoulder, size);
+        elbowPoint = _translateLandmark(elbow, size);
+        final wristPoint = _translateLandmark(wrist, size);
+
+        final armPath = Path()
+          ..moveTo(shoulderPoint.dx, shoulderPoint.dy)
+          ..lineTo(elbowPoint.dx, elbowPoint.dy)
+          ..lineTo(wristPoint.dx, wristPoint.dy);
+        canvas.drawPath(armPath, leftArmPaint);
+
+        elbowAngle = KinematicsEngine.calculateAngle(shoulder, elbow, wrist);
+      }
+
       for (final landmark in pose.landmarks.values) {
-        final point = Offset(
-          _translateX(landmark.x, size),
-          _translateY(landmark.y, size),
-        );
+        final point = _translateLandmark(landmark, size);
         canvas
           ..drawCircle(point, 5, borderPaint)
           ..drawCircle(point, 3.5, pointPaint);
       }
+
+      if (elbowPoint != null && elbowAngle != null) {
+        _paintAngle(canvas, elbowPoint, elbowAngle);
+      }
     }
+  }
+
+  Offset _translateLandmark(PoseLandmark landmark, Size canvasSize) => Offset(
+    _translateX(landmark.x, canvasSize),
+    _translateY(landmark.y, canvasSize),
+  );
+
+  void _paintAngle(Canvas canvas, Offset elbowPoint, double angle) {
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: '${angle.round()}°',
+        style: const TextStyle(
+          color: Colors.yellowAccent,
+          fontSize: 28,
+          fontWeight: FontWeight.w900,
+          shadows: [
+            Shadow(color: Colors.black, blurRadius: 4),
+            Shadow(color: Colors.black, offset: Offset(1, 1)),
+          ],
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+      textAlign: TextAlign.center,
+    )..layout();
+
+    final labelOrigin =
+        elbowPoint - Offset(textPainter.width / 2, textPainter.height / 2);
+    final background = RRect.fromRectAndRadius(
+      Rect.fromCenter(
+        center: elbowPoint,
+        width: textPainter.width + 12,
+        height: textPainter.height + 6,
+      ),
+      const Radius.circular(8),
+    );
+    canvas.drawRRect(
+      background,
+      Paint()..color = Colors.black.withValues(alpha: 0.55),
+    );
+    textPainter.paint(canvas, labelOrigin);
   }
 
   double _translateX(double x, Size canvasSize) {

@@ -1,3 +1,6 @@
+import com.android.build.api.dsl.LibraryExtension
+import com.android.build.api.dsl.ApplicationExtension
+
 allprojects {
     repositories {
         google()
@@ -17,6 +20,17 @@ subprojects {
 }
 subprojects {
     project.evaluationDependsOn(":app")
+
+    if (project.name == "isar_flutter_libs") {
+        afterEvaluate {
+            val appAndroid =
+                rootProject.project(":app").extensions.getByType<ApplicationExtension>()
+            extensions.configure<LibraryExtension> {
+                namespace = "dev.isar.isar_flutter_libs"
+                compileSdk = appAndroid.compileSdk
+            }
+        }
+    }
 }
 
 tasks.register<Delete>("clean") {
